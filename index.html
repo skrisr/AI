@@ -396,8 +396,17 @@
                 if (dataStr === "[DONE]") break;
                 try {
                   const parsed = JSON.parse(dataStr);
-                  if (parsed.text) {
+                  if (parsed.error) {
+                    let errMsg = parsed.error;
+                    if (errMsg.includes("API_KEY") || errMsg.includes("key")) {
+                      errMsg += "\n\n💡 APIキーが設定されていない可能性があります。Settings > Secrets から GEMINI_API_KEY を設定してください。";
+                    }
+                    accumulatedText += `\n\n⚠️ エラー: ${errMsg}`;
+                  } else if (parsed.text) {
                     accumulatedText += parsed.text;
+                  }
+                  
+                  if (parsed.text || parsed.error) {
                     setSessions((prev) =>
                       prev.map((s) => {
                         if (s.id === targetId) {
