@@ -1,14 +1,9 @@
 <!DOCTYPE html>
-<html lang="ja" class="h-full">
+<html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gemini - AI Studio Build Standalone</title>
-  
-  <!-- Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <title>Gemini AI Chat Studio</title>
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -19,423 +14,447 @@
         extend: {
           fontFamily: {
             sans: ['"Plus Jakarta Sans"', 'sans-serif'],
-            display: ['"Outfit"', 'sans-serif'],
+            display: ['Outfit', 'sans-serif'],
           }
         }
       }
     }
   </script>
 
-  <!-- React 18 & ReactDOM & Babel -->
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- React & ReactDOM CDN -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <!-- Babel CDN (for JSX compilation in single file) -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <!-- Lucide Icons -->
+  <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <!-- Marked.js for Markdown -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
   <style>
-    .gemini-markdown {
-      font-size: 0.9375rem;
-      line-height: 1.625;
-      letter-spacing: -0.01em;
-      word-break: break-word;
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
     }
-    .gemini-markdown p { margin-top: 0.5rem; margin-bottom: 0.5rem; }
-    .gemini-markdown p:first-child { margin-top: 0; }
-    .gemini-markdown p:last-child { margin-bottom: 0; }
-    .gemini-markdown ul, .gemini-markdown ol { margin-top: 0.4rem; margin-bottom: 0.4rem; padding-left: 1.25rem; list-style-type: disc; }
-    .gemini-markdown li { margin-top: 0.2rem; margin-bottom: 0.2rem; }
-    .gemini-markdown h1, .gemini-markdown h2, .gemini-markdown h3 { font-weight: 700; margin-top: 1rem; margin-bottom: 0.4rem; }
-    .gemini-markdown code { background: rgba(148, 163, 184, 0.2); padding: 0.15rem 0.35rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.85em; }
-    .gemini-markdown pre { background: #0f172a; color: #f8fafc; padding: 0.75rem 1rem; border-radius: 0.75rem; overflow-x: auto; margin: 0.75rem 0; }
-    .gemini-markdown pre code { background: transparent; padding: 0; color: inherit; }
+    .font-display {
+      font-family: 'Outfit', sans-serif;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(156, 163, 175, 0.4);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(107, 114, 128, 0.7);
+    }
   </style>
 </head>
-<body class="h-full bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-blue-500 selection:text-white">
-
-  <div id="root" class="h-full"></div>
+<body class="bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200">
+  <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    // --- Lucide Icon Helper ---
-    const Icon = ({ name, className = "w-5 h-5", ...props }) => {
+    // --- Gemini 4色スパークルロゴ ---
+    const GeminiLogo = ({ className = "w-6 h-6" }) => (
+      <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="M12 0C12 6.62742 6.62742 12 0 12C6.62742 12 12 17.3726 12 24C12 17.3726 17.3726 12 24 12C17.3726 12 12 6.62742 12 0Z"
+          fill="url(#gemini_4color_grad_pub)"
+        />
+        <defs>
+          <linearGradient id="gemini_4color_grad_pub" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#1a73e8" />
+            <stop offset="30%" stopColor="#d93025" />
+            <stop offset="65%" stopColor="#f9ab00" />
+            <stop offset="100%" stopColor="#1e8e3e" />
+          </linearGradient>
+        </defs>
+      </svg>
+    );
+
+    // --- 汎用 Lucide Icon コンポーネント ---
+    const Icon = ({ name, className = "w-4 h-4" }) => {
       const iconRef = useRef(null);
       useEffect(() => {
         if (iconRef.current && window.lucide) {
-          iconRef.current.innerHTML = '';
-          const iconNode = window.lucide.createElement(window.lucide.icons[name] || window.lucide.icons['HelpCircle']);
-          if (iconNode) {
-            iconRef.current.appendChild(iconNode);
-          }
+          iconRef.current.innerHTML = `<i data-lucide="${name}" class="${className}"></i>`;
+          window.lucide.createIcons({
+            attrs: { class: className },
+            nameAttr: 'data-lucide'
+          });
         }
-      }, [name]);
-      return <span ref={iconRef} className={`inline-flex items-center justify-center ${className}`} {...props} />;
+      }, [name, className]);
+      return <span ref={iconRef} className="inline-flex items-center justify-center" />;
     };
 
-    // --- Models ---
-    const MODELS = [
-      { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash-Lite", desc: "すばやく回答を得るのに最適" },
-      { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", desc: "あらゆる場面でサポート" },
-      { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro", desc: "高度な数学とコーディングに最適" },
-      { id: "gemini-thinking", name: "強化版思考モード", desc: "複雑な問題の解決" }
+    const DEFAULT_MODELS = [
+      { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.5 Flash-Lite', desc: 'すばやく回答を得るのに最適' },
+      { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash', desc: 'あらゆる場面でサポート' },
+      { id: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro', desc: '高度な思考とコーディング' },
+      { id: 'gemini-thinking', name: 'Gemini 思考モード', desc: '複雑な課題の論理的解法' }
     ];
 
     function App() {
       const [sidebarOpen, setSidebarOpen] = useState(false);
-      const [themeMode, setThemeMode] = useState("light");
-      const [appMode, setAppMode] = useState("general"); // general | developer
-      const [activeModel, setActiveModel] = useState(MODELS[0]);
-      const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
-      const [isSearching, setIsSearching] = useState(false);
-      const [searchQuery, setSearchQuery] = useState("");
+      const [themeMode, setThemeMode] = useState(() => localStorage.getItem('gemini_theme') || 'light');
+      const [userName, setUserName] = useState(() => localStorage.getItem('gemini_user_name') || 'sr');
+      const [isEditingName, setIsEditingName] = useState(false);
+      const [inputName, setInputName] = useState(userName);
       
-      const [sessions, setSessions] = useState([
-        {
-          id: "s1",
-          title: "文章問題の途中式と答え",
-          messages: [
-            { id: "m1", sender: "user", text: "文章問題の途中の計算式と回答をまとめて教えてください。" },
-            { id: "m2", sender: "model", text: "### (1) 解答と途中式\n\n* **途中式**: 並びは「白, 黒, 黒」の3個ずつの繰り返しです。\n* **答え**: 黒\n\n### (2) 解答と途中式\n\n* **途中式**: 1周期（白1個、黒2個）で合計3個。\n* **答え**: 白 18個、黒 34個" }
-          ]
-        },
-        { id: "s2", title: "Bloxd coder", messages: [] },
-        { id: "s3", title: "Googleへのリンク表示", messages: [] },
-        { id: "s4", title: "Interactions API: Gemini 新標準", messages: [] }
-      ]);
-      const [activeSessionId, setActiveSessionId] = useState("s1");
-      const [inputText, setInputText] = useState("");
+      const [activeModel, setActiveModel] = useState(DEFAULT_MODELS[0]);
+      const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+      
+      const [sessions, setSessions] = useState(() => {
+        try {
+          const saved = localStorage.getItem('gemini_standalone_sessions');
+          return saved ? JSON.parse(saved) : [];
+        } catch {
+          return [];
+        }
+      });
+      const [activeSessionId, setActiveSessionId] = useState(() => {
+        return sessions.length > 0 ? sessions[0].id : '';
+      });
+
+      const [inputText, setInputText] = useState('');
       const [isLoading, setIsLoading] = useState(false);
 
-      const messagesEndRef = useRef(null);
-
       useEffect(() => {
-        if (themeMode === "dark") {
-          document.documentElement.classList.add("dark");
+        if (themeMode === 'dark') {
+          document.documentElement.classList.add('dark');
         } else {
-          document.documentElement.classList.remove("dark");
+          document.documentElement.classList.remove('dark');
         }
+        localStorage.setItem('gemini_theme', themeMode);
       }, [themeMode]);
 
       useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, [sessions, isLoading]);
+        localStorage.setItem('gemini_standalone_sessions', JSON.stringify(sessions));
+      }, [sessions]);
 
-      const activeSession = sessions.find(s => s.id === activeSessionId) || sessions[0];
+      const handleSaveName = () => {
+        const trimmed = inputName.trim() || 'sr';
+        setUserName(trimmed);
+        localStorage.setItem('gemini_user_name', trimmed);
+        setIsEditingName(false);
+      };
 
-      const handleSend = () => {
+      const handleNewChat = () => {
+        const newId = 'session_' + Date.now();
+        const newSession = {
+          id: newId,
+          title: '新しいチャット',
+          messages: [],
+          createdAt: new Date().toISOString()
+        };
+        setSessions(prev => [newSession, ...prev]);
+        setActiveSessionId(newId);
+      };
+
+      const currentSession = sessions.find(s => s.id === activeSessionId) || { messages: [] };
+
+      const handleSendMessage = (e) => {
+        if (e) e.preventDefault();
         if (!inputText.trim() || isLoading) return;
-        
-        const userMsg = { id: "u_" + Date.now(), sender: "user", text: inputText };
-        const updated = sessions.map(s => {
-          if (s.id === activeSessionId) {
-            return { ...s, messages: [...s.messages, userMsg] };
-          }
-          return s;
-        });
 
-        setSessions(updated);
-        setInputText("");
+        let sessionTargetId = activeSessionId;
+        let updatedSessions = [...sessions];
+
+        if (!sessionTargetId || !sessions.find(s => s.id === sessionTargetId)) {
+          sessionTargetId = 'session_' + Date.now();
+          const newSession = {
+            id: sessionTargetId,
+            title: inputText.trim().substring(0, 20),
+            messages: [],
+            createdAt: new Date().toISOString()
+          };
+          updatedSessions = [newSession, ...updatedSessions];
+          setActiveSessionId(sessionTargetId);
+        }
+
+        const userMsg = {
+          id: 'msg_' + Date.now(),
+          role: 'user',
+          text: inputText,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+
+        const targetSess = updatedSessions.find(s => s.id === sessionTargetId);
+        if (targetSess) {
+          if (targetSess.messages.length === 0) {
+            targetSess.title = inputText.trim().substring(0, 20);
+          }
+          targetSess.messages.push(userMsg);
+        }
+
+        setSessions(updatedSessions);
+        setInputText('');
         setIsLoading(true);
 
-        // AI Response Simulation
         setTimeout(() => {
           const aiMsg = {
-            id: "m_" + Date.now(),
-            sender: "model",
-            text: `ご質問ありがとうございます。\n\n**要点:**\n* **入力内容**: ${inputText}\n* **選択モデル**: ${activeModel.name}\n\nわかりやすく明確に整理して回答いたします。追加のご質問があればお気軽にどうぞ！`
+            id: 'msg_' + (Date.now() + 1),
+            role: 'assistant',
+            text: `ご質問ありがとうございます！\n\n入力された内容: **${userMsg.text}**\n\n選択モデル **${activeModel.name}** で承りました。どのようなことでもお気軽にご相談ください！`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
+
           setSessions(prev => prev.map(s => {
-            if (s.id === activeSessionId) {
+            if (s.id === sessionTargetId) {
               return { ...s, messages: [...s.messages, aiMsg] };
             }
             return s;
           }));
           setIsLoading(false);
-        }, 1000);
+        }, 800);
       };
 
-      const handleNewChat = () => {
-        const newS = { id: "s_" + Date.now(), title: "新しいチャット", messages: [] };
-        setSessions([newS, ...sessions]);
-        setActiveSessionId(newS.id);
+      const handleDeleteSession = (id, e) => {
+        if (e) e.stopPropagation();
+        setSessions(prev => prev.filter(s => s.id !== id));
+        if (activeSessionId === id) {
+          setActiveSessionId('');
+        }
       };
 
       return (
-        <div className="flex h-screen w-screen overflow-hidden">
+        <div className="flex h-screen overflow-hidden bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
           
-          {/* Overlay for mobile sidebar */}
-          {sidebarOpen && (
-            <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-slate-900/40 z-40 lg:hidden" />
-          )}
-
-          {/* Sidebar */}
-          <aside className={`fixed top-0 left-0 bottom-0 z-50 w-72 bg-slate-50 dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800 flex flex-col transition-transform duration-200 lg:static lg:translate-x-0 ${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
-          }`}>
+          {/* 左サイドバー */}
+          <aside className={`fixed lg:static top-0 left-0 bottom-0 z-40 w-72 bg-[#f0f4f9] dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+            
             <div className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <Icon name="Sparkles" className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                <span className="font-extrabold text-base tracking-tight font-display text-slate-900 dark:text-slate-100">
-                  Gemini
-                </span>
+              <div className="flex items-center gap-2.5 cursor-pointer" onClick={handleNewChat}>
+                <GeminiLogo className="w-5 h-5" />
+                <span className="font-extrabold text-lg tracking-tight font-display">Gemini</span>
               </div>
-              <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-1 text-slate-400 hover:text-slate-700">
-                <Icon name="X" className="w-5 h-5" />
+              <button onClick={() => setSidebarOpen(false)} className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg lg:hidden">
+                <Icon name="x" className="w-5 h-5 text-slate-500" />
               </button>
             </div>
 
             <div className="px-3 space-y-1">
-              <button onClick={handleNewChat} className="w-full py-2.5 px-3.5 rounded-full bg-slate-200/70 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 font-bold text-xs flex items-center gap-3 transition-all cursor-pointer">
-                <Icon name="Plus" className="w-4 h-4 text-slate-600 dark:text-slate-300" />
+              <button onClick={handleNewChat} className="w-full py-2.5 px-3.5 rounded-full bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-xs flex items-center gap-3 border border-slate-200/80 dark:border-slate-700 shadow-2xs">
+                <Icon name="pen-square" className="w-4 h-4 text-slate-600 dark:text-slate-300" />
                 <span>チャットを新規作成</span>
               </button>
 
-              <button onClick={() => setIsSearching(!isSearching)} className="w-full py-2 px-3.5 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800 font-medium text-xs flex items-center gap-3 transition-all cursor-pointer">
-                <Icon name="Search" className="w-4 h-4 text-slate-500" />
+              <button className="w-full py-2 px-3.5 rounded-full hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-xs flex items-center gap-3">
+                <Icon name="search" className="w-4 h-4 text-slate-500" />
                 <span>チャットを検索</span>
               </button>
 
-              {isSearching && (
-                <div className="px-3 py-1">
-                  <input
-                    type="text"
-                    placeholder="キーワード検索..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 text-xs rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none"
-                  />
-                </div>
-              )}
-
-              <button className="w-full py-2 px-3.5 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800 font-medium text-xs flex items-center gap-3 transition-all cursor-pointer">
-                <Icon name="Image" className="w-4 h-4 text-slate-500" />
+              <button className="w-full py-2 px-3.5 rounded-full hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-xs flex items-center gap-3">
+                <Icon name="image" className="w-4 h-4 text-slate-500" />
                 <span>画像</span>
               </button>
 
-              <button className="w-full py-2 px-3.5 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800 font-medium text-xs flex items-center gap-3 transition-all cursor-pointer">
-                <Icon name="BookOpen" className="w-4 h-4 text-slate-500" />
+              <button className="w-full py-2 px-3.5 rounded-full hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-xs flex items-center gap-3">
+                <Icon name="layout-grid" className="w-4 h-4 text-slate-500" />
                 <span>ライブラリ</span>
               </button>
             </div>
 
-            <div className="my-3 border-t border-slate-200/60 dark:border-slate-800" />
+            <div className="my-3 border-t border-slate-200 dark:border-slate-800" />
 
-            <div className="flex-1 overflow-y-auto px-3 space-y-4">
-              <div className="space-y-1">
-                <div className="px-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400">ノートブック</div>
-                <button className="w-full py-1.5 px-3 rounded-xl hover:bg-slate-200/50 dark:hover:bg-slate-800 text-xs font-medium flex items-center gap-2.5 transition-all cursor-pointer">
-                  <Icon name="Plus" className="w-3.5 h-3.5 text-slate-400" />
-                  <span>ノートブックを新規作成</span>
-                </button>
-              </div>
-
-              <div className="space-y-1">
-                <div className="px-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400">最近</div>
-                {sessions.filter(s => s.title.toLowerCase().includes(searchQuery.toLowerCase())).map(s => (
+            <div className="flex-1 overflow-y-auto px-3 space-y-3">
+              <div className="px-3 text-[11px] font-semibold text-slate-500">最近</div>
+              {sessions.length === 0 ? (
+                <div className="px-3 text-xs text-slate-400 italic">対話履歴はありません</div>
+              ) : (
+                sessions.map(s => (
                   <div
                     key={s.id}
                     onClick={() => setActiveSessionId(s.id)}
-                    className={`py-2 px-3 rounded-2xl text-xs transition-all cursor-pointer truncate ${
-                      s.id === activeSessionId
-                        ? "bg-slate-200/80 dark:bg-slate-800 font-semibold text-slate-900 dark:text-slate-100"
-                        : "text-slate-700 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/60"
+                    className={`group flex items-center justify-between py-2 px-3.5 rounded-full text-xs cursor-pointer ${
+                      s.id === activeSessionId ? 'bg-slate-200 dark:bg-slate-800 font-bold' : 'hover:bg-slate-200/50 dark:hover:bg-slate-800/60'
                     }`}
                   >
-                    {s.title}
+                    <span className="truncate flex-1">{s.title}</span>
+                    <button onClick={(e) => handleDeleteSession(s.id, e)} className="p-1 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-opacity">
+                      <Icon name="trash-2" className="w-3.5 h-3.5 text-slate-400" />
+                    </button>
                   </div>
-                ))}
-              </div>
+                ))
+              )}
             </div>
 
-            <div className="p-3 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-slate-300 dark:bg-slate-700 flex items-center justify-center font-bold text-xs">
-                  <Icon name="User" className="w-4 h-4 text-slate-700 dark:text-slate-200" />
+            <div className="p-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2 flex-1">
+                <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
+                  <Icon name="user" className="w-4 h-4" />
                 </div>
-                <span className="font-semibold text-xs font-display">sr skri</span>
+                {isEditingName ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={inputName}
+                      onChange={(e) => setInputName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
+                      autoFocus
+                      className="w-24 px-1.5 py-0.5 text-xs border rounded"
+                    />
+                    <button onClick={handleSaveName} className="text-blue-600 font-bold text-xs">保存</button>
+                  </div>
+                ) : (
+                  <div onClick={() => setIsEditingName(true)} className="cursor-pointer font-bold text-xs font-display hover:underline">
+                    {userName}
+                  </div>
+                )}
               </div>
-              <button className="p-2 text-slate-500 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-full">
-                <Icon name="Settings" className="w-4 h-4" />
+              <button onClick={() => setThemeMode(themeMode === 'light' ? 'dark' : 'light')} className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full">
+                <Icon name={themeMode === 'light' ? 'moon' : 'sun'} className="w-4 h-4 text-slate-600 dark:text-slate-300" />
               </button>
             </div>
+
           </aside>
 
-          {/* Main Area */}
-          <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative bg-white dark:bg-slate-950">
+          {/* メインエリア */}
+          <div className="flex-1 flex flex-col h-full min-w-0">
             
-            {/* Header */}
-            <header className="sticky top-0 z-30 px-4 py-2.5 border-b border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between bg-white/90 dark:bg-slate-950/90 backdrop-blur-md">
+            <header className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
-                  <Icon name="PanelLeft" className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+                  <Icon name="panel-left" className="w-5 h-5 text-slate-600 dark:text-slate-300" />
                 </button>
-                <div className="flex items-center gap-2">
-                  <Icon name="Sparkles" className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                  <span className="font-extrabold text-base tracking-tight font-display">Gemini</span>
+                <div className="flex items-center gap-2 cursor-pointer" onClick={handleNewChat}>
+                  <GeminiLogo className="w-5 h-5" />
+                  <span className="font-extrabold text-lg tracking-tight font-display">Gemini</span>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <button className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-blue-100/70 hover:bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-200 text-xs font-bold transition-all">
-                  <Icon name="Sparkles" className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <button onClick={() => alert("Gemini Advanced プロプランです")} className="px-4 py-1.5 rounded-full bg-[#d3e3fd] text-[#041e49] text-xs font-bold flex items-center gap-1.5">
+                  <Icon name="sparkles" className="w-3.5 h-3.5 text-blue-600" />
                   <span>アップグレード</span>
                 </button>
-
-                {/* General / Developer Mode Switch */}
-                <button
-                  onClick={() => setAppMode(appMode === "general" ? "developer" : "general")}
-                  className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                    appMode === "developer"
-                      ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-transparent"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
-                  }`}
-                >
-                  <Icon name="Code" className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">{appMode === "developer" ? "開発者モード" : "一般モード"}</span>
-                </button>
-
-                {/* Dark/Light Switch */}
-                <button
-                  onClick={() => setThemeMode(themeMode === "light" ? "dark" : "light")}
-                  className="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"
-                >
-                  <Icon name={themeMode === "light" ? "Moon" : "Sun"} className="w-4 h-4" />
+                <button onClick={handleNewChat} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
+                  <Icon name="pen-square" className="w-4 h-4 text-slate-600 dark:text-slate-300" />
                 </button>
               </div>
             </header>
 
-            {/* Chat Content */}
-            <main className="flex-1 overflow-y-auto min-h-0 relative">
-              {activeSession.messages.length === 0 ? (
-                <div className="max-w-3xl mx-auto px-4 py-16 flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
-                  <h1 className="text-3xl sm:text-4xl font-bold tracking-tight font-display">
-                    <span className="bg-gradient-to-r from-blue-600 via-red-500 to-amber-500 bg-clip-text text-transparent">
-                      こんにちは
+            <main className="flex-1 overflow-y-auto relative">
+              {currentSession.messages.length === 0 ? (
+                <div className="max-w-2xl mx-auto px-4 py-16 flex flex-col items-center justify-center min-h-[75vh] text-center space-y-10">
+                  <h1 className="text-2xl sm:text-4xl font-normal text-slate-800 dark:text-slate-100 font-display">
+                    <span className="font-semibold bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-500 bg-clip-text text-transparent">
+                      {userName}
                     </span>
+                    {" さん、今の気分はどうですか？"}
                   </h1>
-                  <p className="text-slate-500 text-sm font-medium">今日はどのようなお手伝いをしましょうか？</p>
+
+                  <form onSubmit={handleSendMessage} className="w-full relative rounded-3xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2.5 shadow-lg">
+                    <div className="flex items-center gap-2 px-2">
+                      <button type="button" className="p-2 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full">
+                        <Icon name="plus" className="w-5 h-5" />
+                      </button>
+                      <input
+                        type="text"
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        placeholder="Gemini に相談"
+                        className="flex-1 py-2 text-sm bg-transparent focus:outline-none text-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-200/50 dark:border-slate-800/60 mt-2 px-2">
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-slate-200/80 dark:bg-slate-800 text-xs font-semibold"
+                        >
+                          <span>{activeModel.name}</span>
+                          <Icon name="chevron-down" className="w-3.5 h-3.5" />
+                        </button>
+                        {isModelDropdownOpen && (
+                          <div className="absolute bottom-full left-0 mb-2 w-64 rounded-2xl bg-white dark:bg-slate-900 border shadow-xl p-1 z-50">
+                            {DEFAULT_MODELS.map(m => (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => { setActiveModel(m); setIsModelDropdownOpen(false); }}
+                                className="w-full text-left p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-xs font-medium"
+                              >
+                                {m.name}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button type="button" className="p-2 text-slate-500 hover:bg-slate-200 rounded-full">
+                          <Icon name="mic" className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={!inputText.trim()}
+                          className={`p-2 rounded-full ${!inputText.trim() ? 'bg-slate-200 text-slate-400' : 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'}`}
+                        >
+                          <Icon name="send" className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </form>
                 </div>
               ) : (
-                <div className="divide-y divide-slate-100 dark:divide-slate-900 pb-10">
-                  {activeSession.messages.map(msg => (
-                    <div key={msg.id} className={`py-5 px-4 sm:px-6 ${msg.sender === "model" ? "bg-slate-50/60 dark:bg-slate-900/60" : "bg-white dark:bg-slate-950"}`}>
-                      <div className="max-w-3xl mx-auto flex gap-4 items-start">
-                        <div className="shrink-0 pt-0.5">
-                          {msg.sender === "model" ? (
-                            <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white">
-                              <Icon name="Sparkles" className="w-4 h-4" />
-                            </div>
-                          ) : (
-                            <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 font-bold text-xs">
-                              U
-                            </div>
-                          )}
+                <div className="max-w-3xl mx-auto p-4 space-y-6 pb-24">
+                  {currentSession.messages.map(msg => (
+                    <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      {msg.role === 'assistant' && (
+                        <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                          <GeminiLogo className="w-4 h-4" />
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div
-                            className="gemini-markdown text-slate-800 dark:text-slate-100"
-                            dangerouslySetInnerHTML={{ __html: window.marked ? window.marked.parse(msg.text) : msg.text }}
-                          />
-                        </div>
+                      )}
+                      <div className={`p-4 rounded-2xl max-w-[85%] text-sm ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 rounded-bl-none'}`}>
+                        <div className="whitespace-pre-wrap">{msg.text}</div>
                       </div>
                     </div>
                   ))}
                   {isLoading && (
-                    <div className="py-5 px-4 sm:px-6 bg-slate-50/60 dark:bg-slate-900/60">
-                      <div className="max-w-3xl mx-auto flex gap-4 items-center">
-                        <Icon name="Sparkles" className="w-5 h-5 text-blue-600 animate-spin" />
-                        <span className="text-xs text-slate-500">回答を生成中...</span>
-                      </div>
+                    <div className="flex items-center gap-2 text-slate-400 text-xs italic">
+                      <GeminiLogo className="w-4 h-4 animate-spin" />
+                      <span>Gemini が考え中...</span>
                     </div>
                   )}
-                  <div ref={messagesEndRef} />
                 </div>
               )}
             </main>
 
-            {/* Floating Input Area (Gemini Official Replica) */}
-            <div className="sticky bottom-0 left-0 right-0 p-3 sm:p-5 bg-gradient-to-t from-white via-white/95 to-transparent dark:from-slate-950 dark:via-slate-950/95">
-              <div className="max-w-3xl mx-auto space-y-2">
-                
-                <div className="relative rounded-3xl bg-slate-100/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 p-2 sm:p-2.5 shadow-lg shadow-slate-900/5 focus-within:ring-2 focus-within:ring-blue-500/20">
-                  <div className="flex items-start gap-2">
-                    <button className="mt-1 p-2.5 rounded-full text-slate-500 hover:bg-slate-200/70 dark:hover:bg-slate-800">
-                      <Icon name="Plus" className="w-5 h-5" />
-                    </button>
-                    <textarea
+            {currentSession.messages.length > 0 && (
+              <div className="p-4 bg-gradient-to-t from-white via-white to-transparent dark:from-slate-950">
+                <form onSubmit={handleSendMessage} className="max-w-3xl mx-auto relative rounded-3xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 shadow-md">
+                  <div className="flex items-center gap-2 px-2">
+                    <input
+                      type="text"
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                       placeholder="Gemini に相談"
-                      rows={1}
-                      className="flex-1 py-2.5 px-1 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-500 bg-transparent focus:outline-none resize-none font-normal leading-relaxed min-h-[42px]"
+                      className="flex-1 py-2 text-sm bg-transparent focus:outline-none text-slate-900 dark:text-slate-100"
                     />
+                    <button type="submit" disabled={!inputText.trim()} className="p-2 rounded-full bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900">
+                      <Icon name="send" className="w-4 h-4" />
+                    </button>
                   </div>
-
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-200/40 dark:border-slate-800/60 mt-1">
-                    {/* Model Selector Pill */}
-                    <div className="relative">
-                      <button
-                        onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-200/60 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer"
-                      >
-                        <span>{activeModel.name.replace("Gemini ", "")}</span>
-                        <Icon name="ChevronDown" className="w-3.5 h-3.5 text-slate-500" />
-                      </button>
-
-                      {isModelDropdownOpen && (
-                        <div className="absolute bottom-full left-0 mb-2 w-72 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden z-50 p-1.5 space-y-1">
-                          {MODELS.map(m => (
-                            <button
-                              key={m.id}
-                              onClick={() => { setActiveModel(m); setIsModelDropdownOpen(false); }}
-                              className={`w-full text-left p-2.5 rounded-xl flex items-start gap-2.5 ${
-                                activeModel.id === m.id ? "bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                              }`}
-                            >
-                              <div className="pt-0.5">
-                                {activeModel.id === m.id ? <Icon name="Check" className="w-4 h-4 text-blue-600" /> : <div className="w-4 h-4" />}
-                              </div>
-                              <div>
-                                <div className="font-bold text-xs text-slate-900 dark:text-slate-100 font-display">{m.name}</div>
-                                <div className="text-[11px] text-slate-500">{m.desc}</div>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <button className="p-2 rounded-full text-slate-500 hover:bg-slate-200/60 dark:hover:bg-slate-800">
-                        <Icon name="Mic" className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={handleSend}
-                        disabled={!inputText.trim() || isLoading}
-                        className={`p-2 rounded-full transition-all ${
-                          !inputText.trim() || isLoading
-                            ? "text-slate-300 dark:text-slate-700 bg-slate-200/40 dark:bg-slate-800/40"
-                            : "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                        }`}
-                      >
-                        <Icon name="Send" className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-center text-[11px] text-slate-400 dark:text-slate-500 pt-0.5">
-                  Gemini は AI であり、間違えることがあります。
-                </div>
-
+                </form>
               </div>
-            </div>
+            )}
 
           </div>
 
@@ -443,7 +462,7 @@
       );
     }
 
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
 </html>
