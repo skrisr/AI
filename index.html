@@ -180,10 +180,8 @@
 
     // 表示用のモデル一覧（見た目のみ。実際の呼び出しは全て同じバックエンドモデルを使用）
     const MODELS = [
-      { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", badge: "標準", desc: "高速でバランスに優れた最新標準モデル" },
-      { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview", badge: "高度推論", desc: "複雑な思考と高度な分析・コーディングに対応" },
-      { id: "gemini-3.1-flash-lite", name: "Gemini 3.1 Flash-Lite", badge: "爆速", desc: "最高速のレスポンス" },
-      { id: "gemini-thinking", name: "Gemini 思考モード", badge: "Deep Thinking", desc: "多角的な論理プロセスを表示" }
+      { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", badge: "標準", desc: "高速でバランスに優れた最新の標準モデル(GA)" },
+      { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash-Lite", badge: "爆速", desc: "最速・最安の軽量モデル(GA)" }
     ];
 
     function App() {
@@ -225,13 +223,19 @@
       const [isConfigOpen, setIsConfigOpen] = useState(false);
       const [systemInstruction, setSystemInstruction] = useState("");
       const [temperature, setTemperature] = useState(0.7);
+      const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem("gemini_api_key") || "");
+
+      useEffect(() => {
+        localStorage.setItem("gemini_api_key", geminiApiKey);
+      }, [geminiApiKey]);
 
       // --- 新規: 検索・ライブラリ・ノートブック作成・トースト通知の状態 ---
       const [isSearchOpen, setIsSearchOpen] = useState(false);
       const [searchTerm, setSearchTerm] = useState("");
       const [isLibraryOpen, setIsLibraryOpen] = useState(false);
       const [isNotebookModalOpen, setIsNotebookModalOpen] = useState(false);
-      const [newNotebookName, setNewNotebookName] = useState("");
+      // ノートブックは { id, title, content } の配列。content は会話にシステムプロンプトとして流用できる。
+      const [notebookDraft, setNotebookDraft] = useState({ id: null, title: "", content: "" });
       const [toast, setToast] = useState(null);
 
       const fileInputRef = useRef(null);
@@ -289,18 +293,43 @@
 
       const currentSession = sessions.find((s) => s.id === activeSessionId) || { messages: [] };
 
-      const handleOpenNotebookModal = () => {
-        setNewNotebookName("");
+      const handleOpenNewNotebookModal = () => {
+        setNotebookDraft({ id: null, title: "", content: "" });
         setIsNotebookModalOpen(true);
       };
 
-      const handleConfirmCreateNotebook = () => {
-        const name = newNotebookName.trim();
-        if (name) {
-          setNotebooks((prev) => [...prev, name]);
-          showToast(`ノートブック「${name}」を作成しました`);
+      const handleOpenEditNotebookModal = (nb) => {
+        setNotebookDraft({ id: nb.id, title: nb.title, content: nb.content || "" });
+        setIsNotebookModalOpen(true);
+      };
+
+      const handleSaveNotebook = () => {
+        const title = notebookDraft.title.trim();
+        if (!title) return;
+        if (notebookDraft.id) {
+          setNotebooks((prev) =>
+            prev.map((nb) => (nb.id === notebookDraft.id ? { ...nb, title, content: notebookDraft.content } : nb))
+          );
+          showToast(`ノートブック「${title}」を更新しました`);
+        } else {
+          const newNb = { id: "nb_" + Date.now(), title, content: notebookDraft.content };
+          setNotebooks((prev) => [...prev, newNb]);
+          showToast(`ノートブック「${title}」を作成しました`);
         }
         setIsNotebookModalOpen(false);
+      };
+
+      const handleDeleteNotebook = (id) => {
+        setNotebooks((prev) => prev.filter((nb) => nb.id !== id));
+        setIsNotebookModalOpen(false);
+        showToast("ノートブックを削除しました");
+      };
+
+      const handleUseNotebookAsContext = () => {
+        if (!notebookDraft.content.trim()) return;
+        setSystemInstruction(notebookDraft.content.trim());
+        setIsNotebookModalOpen(false);
+        showToast("このノートブックの内容をシステムプロンプトに設定しました");
       };
 
       const handleFileUpload = (e) => {
@@ -323,35 +352,32 @@
         e.target.value = "";
       };
 
-      // 会話履歴を Anthropic Messages API 形式に変換する
-      const buildApiMessages = (messages) => {
+      // 会話履歴を Gemini API (generateContent) の contents/parts 形式に変換する
+      const buildApiContents = (messages) => {
         return messages.map((m) => {
-          const content = [];
+          const parts = [];
+          if (m.text) {
+            parts.push({ text: m.text });
+          }
           if (m.attachments) {
             m.attachments.forEach((att) => {
               if (att.data && att.data.includes(";base64,")) {
                 const [meta, base64Data] = att.data.split(";base64,");
-                const mediaType = meta.replace("data:", "");
-                if (mediaType.startsWith("image/")) {
-                  content.push({
-                    type: "image",
-                    source: { type: "base64", media_type: mediaType, data: base64Data }
-                  });
+                const mimeType = meta.replace("data:", "");
+                if (mimeType.startsWith("image/")) {
+                  parts.push({ inlineData: { mimeType, data: base64Data } });
                 }
               }
             });
           }
-          if (m.text) {
-            content.push({ type: "text", text: m.text });
-          }
           return {
-            role: m.role === "user" ? "user" : "assistant",
-            content: content.length > 0 ? content : [{ type: "text", text: " " }]
+            role: m.role === "user" ? "user" : "model",
+            parts: parts.length > 0 ? parts : [{ text: " " }]
           };
         });
       };
 
-      // ★ 実際の AI API 呼び出し（ノンストリーミング / api.anthropic.com 経由）★
+      // ★ 実際の Gemini API 呼び出し（ユーザー自身のAPIキーで直接呼び出し）★
       const handleSendMessage = async () => {
         if ((!inputText.trim() && attachments.length === 0) || isLoading) return;
 
@@ -391,40 +417,66 @@
         setAttachments([]);
         setIsLoading(true);
 
+        if (!geminiApiKey.trim()) {
+          const warnMsg = {
+            id: "msg_" + (Date.now() + 1),
+            role: "assistant",
+            text: "⚠️ Gemini APIキーが設定されていません。右下の設定アイコンから、Google AI Studio (https://aistudio.google.com/apikey) で無料発行できるAPIキーを入力してください。",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          };
+          setSessions((prev) =>
+            prev.map((s) => (s.id === targetId ? { ...s, messages: [...s.messages, warnMsg] } : s))
+          );
+          setIsLoading(false);
+          setIsConfigOpen(true);
+          return;
+        }
+
         try {
           const requestBody = {
-            model: "claude-sonnet-4-6",
-            max_tokens: 1000,
-            temperature: temperature,
-            messages: buildApiMessages(targetSess.messages)
+            contents: buildApiContents(targetSess.messages),
+            generationConfig: { temperature: temperature }
           };
           if (systemInstruction.trim()) {
-            requestBody.system = systemInstruction.trim();
+            requestBody.systemInstruction = { parts: [{ text: systemInstruction.trim() }] };
           }
           if (enableGoogleSearch) {
-            requestBody.tools = [{ type: "web_search_20250305", name: "web_search" }];
+            requestBody.tools = [{ google_search: {} }];
           }
 
-          const res = await fetch("https://api.anthropic.com/v1/messages", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(requestBody)
-          });
+          // 実際の Google Gemini API (generateContent) を直接呼び出す。
+          // GitHub Pages のような静的ホスティングではバックエンドを用意できないため、
+          // ユーザー自身の API キーをブラウザから直接送信する構成にしている。
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${activeModel.id}:generateContent`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-goog-api-key": geminiApiKey.trim()
+              },
+              body: JSON.stringify(requestBody)
+            }
+          );
+
+          let data;
+          try {
+            data = await res.json();
+          } catch {
+            throw new Error(`サーバーから不正な応答がありました (HTTP ${res.status})`);
+          }
 
           if (!res.ok) {
-            let detail = "";
-            try {
-              const errJson = await res.json();
-              detail = errJson?.error?.message || "";
-            } catch {}
-            throw new Error(`APIエラー (${res.status})${detail ? ": " + detail : ""}`);
+            const detail = data?.error?.message || `HTTP ${res.status}`;
+            throw new Error(detail);
           }
 
-          const data = await res.json();
-          const replyText = (data.content || [])
-            .filter((block) => block.type === "text")
-            .map((block) => block.text)
-            .join("\n\n") || "(応答にテキストが含まれていませんでした)";
+          const candidate = data?.candidates?.[0];
+          const replyText =
+            (candidate?.content?.parts || [])
+              .map((p) => p.text || "")
+              .join("\n\n")
+              .trim() || "(応答にテキストが含まれていませんでした)";
 
           const assistantMsg = {
             id: "msg_" + (Date.now() + 1),
@@ -437,11 +489,11 @@
             prev.map((s) => (s.id === targetId ? { ...s, messages: [...s.messages, assistantMsg] } : s))
           );
         } catch (err) {
-          console.error("API Error:", err);
+          console.error("Gemini API Error:", err);
           const errorMsg = {
             id: "msg_" + (Date.now() + 1),
             role: "assistant",
-            text: `⚠️ 通信エラー: ${err.message}`,
+            text: `⚠️ 通信エラー: ${err.message}\n\nAPIキーが正しいか、Google AI StudioでこのモデルとGemini APIが有効になっているかご確認ください。`,
             timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
           };
           setSessions((prev) =>
@@ -530,14 +582,14 @@
             <div className="flex-1 overflow-y-auto px-3 space-y-4">
               <div className="space-y-1">
                 <div className="px-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400">ノートブック</div>
-                <button onClick={handleOpenNotebookModal} className="w-full py-1.5 px-3 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium flex items-center gap-2 cursor-pointer">
+                <button onClick={handleOpenNewNotebookModal} className="w-full py-1.5 px-3 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium flex items-center gap-2 cursor-pointer">
                   <Icons.Plus className="w-3.5 h-3.5 text-slate-400" />
                   <span>ノートブックを新規作成</span>
                 </button>
-                {notebooks.map((nb, i) => (
-                  <div key={i} onClick={() => showToast(`「${nb}」を開きました`)} className="py-1.5 px-3 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs flex items-center gap-2 cursor-pointer">
+                {notebooks.map((nb) => (
+                  <div key={nb.id} onClick={() => handleOpenEditNotebookModal(nb)} className="py-1.5 px-3 rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs flex items-center gap-2 cursor-pointer">
                     <Icons.FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="truncate">{nb}</span>
+                    <span className="truncate">{nb.title}</span>
                   </div>
                 ))}
               </div>
@@ -877,6 +929,19 @@
 
                 <div className="space-y-4 text-xs">
                   <div>
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Gemini API キー</label>
+                    <input
+                      type="password"
+                      value={geminiApiKey}
+                      onChange={(e) => setGeminiApiKey(e.target.value)}
+                      placeholder="AIza..."
+                      className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none text-slate-900 dark:text-slate-100"
+                    />
+                    <p className="mt-1 text-[10px] text-slate-400 leading-relaxed">
+                      <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 underline">Google AI Studio</a> で無料発行できます。このキーはブラウザのlocalStorageにのみ保存され、外部には送信されません（Gemini API自体への通信を除く）。公開サイトで使う場合はAPIキーに使用制限（HTTPリファラー制限など）をかけることを推奨します。
+                    </p>
+                  </div>
+                  <div>
                     <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">システムプロンプト (System Instruction)</label>
                     <textarea
                       value={systemInstruction}
@@ -969,10 +1034,14 @@
                     <div className="text-xs text-slate-400 italic">ノートブックはまだありません</div>
                   ) : (
                     <div className="grid grid-cols-2 gap-2">
-                      {notebooks.map((nb, i) => (
-                        <div key={i} className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs flex items-center gap-2 truncate">
+                      {notebooks.map((nb) => (
+                        <div
+                          key={nb.id}
+                          onClick={() => { handleOpenEditNotebookModal(nb); setIsLibraryOpen(false); }}
+                          className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs flex items-center gap-2 truncate cursor-pointer"
+                        >
                           <Icons.FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate">{nb}</span>
+                          <span className="truncate">{nb.title}</span>
                         </div>
                       ))}
                     </div>
@@ -1002,27 +1071,48 @@
             </div>
           )}
 
-          {/* ノートブック新規作成モーダル */}
+          {/* ノートブック編集モーダル(新規作成兼用) */}
           {isNotebookModalOpen && (
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4" onClick={() => setIsNotebookModalOpen(false)}>
-              <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-sm w-full p-6 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                <h2 className="font-bold text-base font-display text-slate-900 dark:text-slate-100">新規ノートブック</h2>
+              <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-lg w-full p-6 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <h2 className="font-bold text-base font-display text-slate-900 dark:text-slate-100">
+                  {notebookDraft.id ? "ノートブックを編集" : "新規ノートブック"}
+                </h2>
                 <input
                   autoFocus
                   type="text"
-                  value={newNotebookName}
-                  onChange={(e) => setNewNotebookName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleConfirmCreateNotebook()}
+                  value={notebookDraft.title}
+                  onChange={(e) => setNotebookDraft({ ...notebookDraft, title: e.target.value })}
                   placeholder="ノートブックのタイトル"
                   className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none text-sm text-slate-900 dark:text-slate-100"
                 />
-                <div className="flex justify-end gap-2">
-                  <button onClick={() => setIsNotebookModalOpen(false)} className="px-4 py-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs cursor-pointer">
-                    キャンセル
-                  </button>
-                  <button onClick={handleConfirmCreateNotebook} className="px-4 py-2 rounded-full bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 font-bold text-xs cursor-pointer">
-                    作成
-                  </button>
+                <textarea
+                  value={notebookDraft.content}
+                  onChange={(e) => setNotebookDraft({ ...notebookDraft, content: e.target.value })}
+                  placeholder="メモ・資料の内容をここに書きます。「会話で使う」を押すと、この内容をシステムプロンプトとしてチャットに適用できます。"
+                  rows="6"
+                  className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none text-xs text-slate-900 dark:text-slate-100"
+                />
+                <div className="flex items-center justify-between">
+                  <div>
+                    {notebookDraft.id && (
+                      <button onClick={() => handleDeleteNotebook(notebookDraft.id)} className="px-3 py-2 rounded-full text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 font-bold text-xs cursor-pointer flex items-center gap-1.5">
+                        <Icons.Trash2 className="w-3.5 h-3.5" />
+                        削除
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={handleUseNotebookAsContext} disabled={!notebookDraft.content.trim()} className={`px-3 py-2 rounded-full font-bold text-xs cursor-pointer ${notebookDraft.content.trim() ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 hover:bg-emerald-200" : "bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600"}`}>
+                      会話で使う
+                    </button>
+                    <button onClick={() => setIsNotebookModalOpen(false)} className="px-4 py-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs cursor-pointer">
+                      キャンセル
+                    </button>
+                    <button onClick={handleSaveNotebook} disabled={!notebookDraft.title.trim()} className={`px-4 py-2 rounded-full font-bold text-xs cursor-pointer ${notebookDraft.title.trim() ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900" : "bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-600"}`}>
+                      保存
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
